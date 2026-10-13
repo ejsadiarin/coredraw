@@ -1,0 +1,101 @@
+@baseUrl = localhost:6971
+@jwt = PASTE_INTERNAL_JWT_HERE
+
+# ─── Ops ─────────────────────────────────────────────────────────────
+# No auth: pool ping + pool stats.
+
+### Hello
+
+GET {{baseUrl}}/
+
+### Health
+
+GET {{baseUrl}}/health
+
+
+# ─── Boards ──────────────────────────────────────────────────────────
+# All routes require the gateway-minted internal JWT
+# (use a token minted for audience "coredraw").
+
+### List boards
+
+GET {{baseUrl}}/api/coredraw/boards?limit=50&offset=0
+Authorization: Bearer {{jwt}}
+
+### Create board
+
+POST {{baseUrl}}/api/coredraw/boards
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "title": "payments"
+}
+
+### Get board (replace :id)
+
+GET {{baseUrl}}/api/coredraw/boards/:id
+Authorization: Bearer {{jwt}}
+
+### Save board — matching revision wins, revision increments
+
+PUT {{baseUrl}}/api/coredraw/boards/:id
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "snapshot": {"store": {"v": 2}},
+  "snapshot_version": 2,
+  "doc": "# payments",
+  "revision": 1
+}
+
+### Save board — stale revision (expect 409)
+
+PUT {{baseUrl}}/api/coredraw/boards/:id
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "snapshot": {"store": {"v": 1}},
+  "snapshot_version": 1,
+  "doc": "# stale",
+  "revision": 1
+}
+
+### Rename board
+
+PATCH {{baseUrl}}/api/coredraw/boards/:id
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "title": "ledger"
+}
+
+### Delete board (expect 204)
+
+DELETE {{baseUrl}}/api/coredraw/boards/:id
+Authorization: Bearer {{jwt}}
+
+
+# ─── Identity cases ──────────────────────────────────────────────────
+
+### Spoof attempt: bare X-User-ID, no JWT (expect 401)
+
+GET {{baseUrl}}/api/coredraw/boards
+X-User-ID: 00000000-0000-0000-0000-000000000000
+
+### No credentials at all (expect 401)
+
+GET {{baseUrl}}/api/coredraw/boards
+
+### Garbled JWT (expect 401)
+
+GET {{baseUrl}}/api/coredraw/boards
+Authorization: Bearer PASTE_EXPIRED_OR_GARBLED_JWT_HERE
+
+### Cross-service replay: token minted for another audience (expect 401)
+
+GET {{baseUrl}}/api/coredraw/boards
+Authorization: Bearer PASTE_COREFINANCE_AUDIENCE_JWT_HERE

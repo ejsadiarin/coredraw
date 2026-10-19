@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -249,6 +250,68 @@ func TestSaveBoardRevisionGuard(t *testing.T) {
 		`{"snapshot":{},"snapshot_version":1,"doc":"","revision":1}`)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("missing board: status = %d, want 404", rec.Code)
+	}
+}
+
+// A snapshot_version 2 payload is an Excalidraw scene. The server treats it as
+// an opaque blob: it never parses the scene shape, storing and returning the
+// bytes unchanged.
+func TestSnapshotVersionTwoRoundTripsOpaquely(t *testing.T) {
+	userID := uuid.New()
+	id := uuid.New()
+	const scene = `{"elements":[{"type":"rectangle","id":"abc","x":10,"y":20}],"appState":{"viewBackgroundColor":"#ffffff","gridSize":20,"gridModeEnabled":false}}`
+
+	var stored Board
+	store := &stubStore{
+		get: func(_ context.Context, gotUser, gotID uuid.UUID) (Board, error) {
+			if gotUser != userID || gotID != id {
+				return Board{}, ErrNotFound
+			}
+			return stored, nil
+		},
+		save: func(_ context.Context, gotUser, gotID uuid.UUID, snapshot []byte, version int32, doc string, revision int64) (Board, error) {
+			if gotUser != userID || gotID != id {
+				return Board{}, ErrNotFound
+			}
+			stored = Board{
+				ID:              id,
+				Title:           "payments",
+				Snapshot:        json.RawMessage(append([]byte(nil), snapshot...)),
+				SnapshotVersion: version,
+				Doc:             doc,
+				Revision:        revision + 1,
+			}
+			return stored, nil
+		},
+	}
+	r := testRouter(store, &userID)
+
+	rec := doRequest(t, r, http.MethodPut, "/"+id.String(),
+		`{"snapshot":`+scene+`,"snapshot_version":2,"doc":"# x","revision":1}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save: status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(t, r, http.MethodGet, "/"+id.String(), "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: status = %d, want 200", rec.Code)
+	}
+	var got Board
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.SnapshotVersion != 2 {
+		t.Errorf("snapshot_version = %d, want 2", got.SnapshotVersion)
+	}
+	var want, have any
+	if err := json.Unmarshal([]byte(scene), &want); err != nil {
+		t.Fatalf("decode scene: %v", err)
+	}
+	if err := json.Unmarshal(got.Snapshot, &have); err != nil {
+		t.Fatalf("decode returned snapshot: %v", err)
+	}
+	if !reflect.DeepEqual(want, have) {
+		t.Errorf("snapshot changed in flight:\n got %s\nwant %s", got.Snapshot, scene)
 	}
 }
 

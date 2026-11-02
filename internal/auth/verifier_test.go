@@ -344,3 +344,81 @@ func TestNewVerifierUnreachableJWKRFailsClosed(t *testing.T) {
 		t.Fatalf("NewVerifier with unreachable JWKS: want error, got nil")
 	}
 }
+
+func TestRefreshConditionalGet(t *testing.T) {
+	priv := mustKey(t)
+	kid := "2026-09-a"
+
+	var mu sync.Mutex
+	etag := `"v1"`
+	keys := map[string]ed25519.PublicKey{kid: priv.Public().(ed25519.PublicKey)}
+	notModified := 0
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if r.Header.Get("If-None-Match") == etag {
+			notModified++
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("ETag", etag)
+		var b strings.Builder
+		b.WriteString(`{"keys":[`)
+		first := true
+		for k, pub := range keys {
+			if !first {
+				b.WriteString(",")
+			}
+			first = false
+			fmt.Fprintf(&b, `{"kty":"OKP","crv":"Ed25519","kid":%q,"x":%q,"use":"sig","alg":"EdDSA"}`,
+				k, base64.RawURLEncoding.EncodeToString(pub))
+		}
+		b.WriteString(`]}`)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(b.String()))
+	}))
+	t.Cleanup(srv.Close)
+
+	v, err := NewVerifier(Config{Issuer: testIssuer, Audience: testAudience, JWKSURL: srv.URL})
+	if err != nil {
+		t.Fatalf("NewVerifier: %v", err)
+	}
+
+	// Unchanged key set: the refresh carries the validator and gets a 304.
+	if err := v.refresh(); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	mu.Lock()
+	conditional := notModified
+	mu.Unlock()
+	if conditional != 1 {
+		t.Fatalf("conditional requests = %d, want 1", conditional)
+	}
+	v.mu.RLock()
+	cached, ok := v.keys[kid]
+	v.mu.RUnlock()
+	if !ok || !cached.Equal(priv.Public()) {
+		t.Fatal("304 dropped the cached key")
+	}
+
+	// A new key set (new ETag) replaces the cache.
+	newPriv := mustKey(t)
+	mu.Lock()
+	etag = `"v2"`
+	keys = map[string]ed25519.PublicKey{"2026-09-b": newPriv.Public().(ed25519.PublicKey)}
+	mu.Unlock()
+	if err := v.refresh(); err != nil {
+		t.Fatalf("refresh after rotation: %v", err)
+	}
+	v.mu.RLock()
+	_, oldPresent := v.keys[kid]
+	rotated, newPresent := v.keys["2026-09-b"]
+	v.mu.RUnlock()
+	if oldPresent {
+		t.Error("retired kid still published after a changed key set")
+	}
+	if !newPresent || !rotated.Equal(newPriv.Public()) {
+		t.Error("rotated key was not picked up")
+	}
+}

@@ -8,6 +8,9 @@
 --
 --   psql "$MIGRATION_URL" -f internal/db/bootstrap.sql
 --
+-- Neon rejects the REPLACE_ME placeholder below as an insecure password, so
+-- create coredraw_role with a real password first. `make db-setup` does that.
+--
 -- Roles are cluster-level and must exist before migrations run as the owner,
 -- so they live here rather than in the goose chain (same split as the
 -- gateway's and corefinance's bootstrap.sql).

@@ -4,7 +4,7 @@
 --
 -- Creates the coredraw schema, the runtime role, and its grants. Run ONCE per
 -- environment as neondb_owner over the DIRECT (non-pooler) endpoint, before
--- the first migration (goose -dir internal/db/migrations postgres "$MIGRATION_URL" up):
+-- the first `make migrate-up` (or just run `make db-setup`, which does both):
 --
 --   psql "$MIGRATION_URL" -f internal/db/bootstrap.sql
 --

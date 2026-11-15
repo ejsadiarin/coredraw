@@ -1,7 +1,7 @@
 # coredraw
 
 Whiteboards for the Core dashboard, served as a downstream service behind
-[coregateway](https://github.com/ejsadiarin/coregateway/blob/rewrite-v2/README.md).
+[coregateway](https://github.com/ejsadiarin/coregateway/blob/main/README.md).
 The dashboard's **Draw** section (`web/` in coregateway) is its UI. Each
 board belongs to one user and is saved whole, as a snapshot.
 
@@ -10,7 +10,7 @@ board belongs to one user and is saved whole, as a snapshot.
 **The easy way: run it with everything else.** From a coregateway checkout,
 its `local-up` target builds and starts coredraw, the gateway, the other services
 and the dashboard, with their own Postgres. See coregateway's
-[Quick start](https://github.com/ejsadiarin/coregateway/blob/rewrite-v2/README.md#quick-start-the-whole-stack-locally).
+[Quick start](https://github.com/ejsadiarin/coregateway/blob/main/README.md#quick-start-the-whole-stack-locally).
 
 **Run this repo's code against that stack.** With coregateway's `local-up` target
 running, a native coredraw can use the same database and gateway. Put
@@ -57,7 +57,7 @@ container.
   deploying a new image; nothing migrates at start.
 
 No other accounts are needed. For the whole stack's database setup, see
-coregateway's [Setting up Neon](https://github.com/ejsadiarin/coregateway/blob/rewrite-v2/README.md#setting-up-neon).
+coregateway's [Setting up Neon](https://github.com/ejsadiarin/coregateway/blob/main/README.md#setting-up-neon).
 
 ## API
 
